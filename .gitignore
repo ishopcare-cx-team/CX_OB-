@@ -1,0 +1,48 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# 디버그 스크린샷·데이터 엑셀 (운영 룰의 진실소스는 구글시트 → repo에 불필요)
+/*.png
+/*.xlsx
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# 회사망 전용 npm 미러 (CX팀 환경에선 기본 registry 사용)
+.npmrc
