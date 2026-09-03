@@ -24,16 +24,19 @@ import { TypeStatusTable } from "@/components/dashboard/TypeStatusTable";
 import { TicketTable } from "@/components/dashboard/TicketTable";
 import { FiltersBar } from "@/components/dashboard/FiltersBar";
 import { PendingReviewList } from "@/components/dashboard/PendingReviewList";
+import { CheckRequestList } from "@/components/dashboard/CheckRequestList";
+import type { CheckRequest } from "@/lib/checkRequests";
 
 const POLL_MS = 30_000;
 
 const RESPONSE_COLOR = "#1baf7a";
 const RESOLUTION_COLOR = "#eb6834";
 
-type Tab = "type" | "agent";
+type Tab = "type" | "agent" | "check";
 const TABS: { key: Tab; label: string }[] = [
   { key: "type", label: "문의유형별 분석" },
   { key: "agent", label: "CX 담당자별 처리 현황" },
+  { key: "check", label: "체크 요청 리스트" },
 ];
 
 export default function DashboardPage() {
@@ -44,6 +47,8 @@ export default function DashboardPage() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [tab, setTab] = useState<Tab>("type");
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [checkRequests, setCheckRequests] = useState<CheckRequest[]>([]);
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -60,11 +65,29 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadCheckRequests = useCallback(async () => {
+    try {
+      const res = await fetch("/api/check-requests", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `오류 (${res.status})`);
+      setCheckRequests(data.items);
+      setCheckError(null);
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   useEffect(() => {
     load();
     const id = setInterval(load, POLL_MS);
     return () => clearInterval(id);
   }, [load]);
+
+  useEffect(() => {
+    loadCheckRequests();
+    const id = setInterval(loadCheckRequests, POLL_MS);
+    return () => clearInterval(id);
+  }, [loadCheckRequests]);
 
   const types = useMemo(
     () => [...new Set(tickets.map((t) => t.type))].sort(),
@@ -250,7 +273,7 @@ export default function DashboardPage() {
                 </section>
               </div>
             </div>
-          ) : (
+          ) : tab === "agent" ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <section className="rounded-xl border border-gray-200 bg-white p-4">
@@ -287,6 +310,22 @@ export default function DashboardPage() {
                 </section>
               </div>
             </div>
+          ) : (
+            <section className="rounded-xl border border-gray-200 bg-white p-4">
+              <h2 className="mb-1 text-sm font-semibold text-gray-700">
+                체크 요청 리스트 ({checkRequests.length}건)
+              </h2>
+              <p className="mb-3 text-xs text-gray-500">
+                슬랙 워크플로우로 접수된, 불필요 여부 확인이 필요한 OB 요청 목록입니다.
+              </p>
+              {checkError && (
+                <div className="mb-3 text-xs text-red-500">
+                  갱신 실패: {checkError}
+                  {checkRequests.length > 0 && " (이전 데이터 표시 중)"}
+                </div>
+              )}
+              <CheckRequestList items={checkRequests} />
+            </section>
           )}
         </div>
 

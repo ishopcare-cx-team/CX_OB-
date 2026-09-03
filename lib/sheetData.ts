@@ -41,7 +41,7 @@ export interface Ticket {
 }
 
 // RFC4180 계열 CSV 파서 (따옴표 내 개행·콤마·이스케이프 따옴표 처리)
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -86,7 +86,7 @@ function parseCsv(text: string): string[][] {
 }
 
 // "2026. 5. 14  21:14:06" (KST 벽시계 시각 문자열) -> 실제 UTC 인스턴트로 변환한 Date
-function parseKstWallClock(s: string): Date | null {
+export function parseKstWallClock(s: string): Date | null {
   const m = /^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})/.exec(
     s.trim()
   );
@@ -112,7 +112,7 @@ const KST_DATEKEY_FMT = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-function kstLabel(d: Date): string {
+export function kstLabel(d: Date): string {
   // sv-SE -> "YYYY-MM-DD HH:mm"
   return KST_LABEL_FMT.format(d).replace(",", "");
 }
