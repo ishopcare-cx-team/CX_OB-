@@ -208,17 +208,6 @@ export default function DashboardPage() {
           </section>
         </div>
 
-        <section className="mb-6 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-gray-700">
-            확인 중인 요청 ({pendingReview.length}건)
-          </h2>
-          <p className="mb-3 text-xs text-gray-500">
-            처리상태가 &apos;확인 중&apos;인 건의 메시지 링크입니다. 오래된 순으로
-            표시됩니다.
-          </p>
-          <PendingReviewList tickets={pendingReview} />
-        </section>
-
         <div className="mb-6">
           <div className="mb-4 flex gap-1 border-b border-gray-200">
             {TABS.map((t) => (
@@ -328,6 +317,17 @@ export default function DashboardPage() {
             </section>
           )}
         </div>
+
+        <section className="mb-6 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-gray-700">
+            확인 중인 요청 ({pendingReview.length}건)
+          </h2>
+          <p className="mb-3 text-xs text-gray-500">
+            처리상태가 &apos;확인 중&apos;인 건의 메시지 링크입니다. 오래된 순으로
+            표시됩니다.
+          </p>
+          <PendingReviewList tickets={pendingReview} />
+        </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
