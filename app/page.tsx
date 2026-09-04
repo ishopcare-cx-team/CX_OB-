@@ -209,15 +209,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="mb-6">
-          <div className="mb-4 flex gap-1 border-b border-gray-200">
+          <div className="mb-4 flex gap-1 rounded-lg bg-amber-50 p-1">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   tab === t.key
-                    ? "border-[#2a78d6] text-[#2a78d6]"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    ? "bg-amber-300 text-amber-950 shadow-sm"
+                    : "text-amber-800/70 hover:bg-amber-100 hover:text-amber-900"
                 }`}
               >
                 {t.label}
