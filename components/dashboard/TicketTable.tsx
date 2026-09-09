@@ -7,6 +7,7 @@ export function TicketTable({ tickets }: { tickets: Ticket[] }) {
         <thead>
           <tr className="border-b border-gray-200 text-gray-500">
             <th className="py-2 pr-3 font-medium">접수 시각</th>
+            <th className="py-2 pr-3 font-medium">요청자</th>
             <th className="py-2 pr-3 font-medium">문의유형</th>
             <th className="py-2 pr-3 font-medium">상태</th>
             <th className="py-2 pr-3 font-medium">담당자</th>
@@ -23,6 +24,9 @@ export function TicketTable({ tickets }: { tickets: Ticket[] }) {
             >
               <td className="py-2 pr-3 tabular-nums whitespace-nowrap text-gray-600">
                 {t.receivedLabel ?? "-"}
+              </td>
+              <td className="py-2 pr-3 whitespace-nowrap text-gray-600">
+                {t.requester || "-"}
               </td>
               <td className="py-2 pr-3 text-gray-900">{t.type}</td>
               <td className="py-2 pr-3">
@@ -61,7 +65,7 @@ export function TicketTable({ tickets }: { tickets: Ticket[] }) {
           ))}
           {tickets.length === 0 && (
             <tr>
-              <td colSpan={7} className="py-6 text-center text-gray-400">
+              <td colSpan={8} className="py-6 text-center text-gray-400">
                 조건에 맞는 요청이 없습니다.
               </td>
             </tr>
