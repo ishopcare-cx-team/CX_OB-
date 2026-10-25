@@ -1,4 +1,5 @@
 import { CLOSED_STATUSES, STATUS_ORDER, type Ticket } from "@/lib/sheetData";
+import { NO_PART, PART_SEP } from "@/lib/requester";
 
 export interface Filters {
   from: string | null; // "YYYY-MM-DD"
@@ -6,6 +7,8 @@ export interface Filters {
   type: string; // "all" | 문의유형
   agent: string; // "all" | 담당자
   status: string; // "all" | 처리상태
+  team: string; // "all" | 팀 | "팀 › 파트" | "팀 › (파트 없음)"
+  keyword: string; // "all" | 키워드
   search: string;
 }
 
@@ -15,6 +18,8 @@ export const DEFAULT_FILTERS: Filters = {
   type: "all",
   agent: "all",
   status: "all",
+  team: "all",
+  keyword: "all",
   search: "",
 };
 
@@ -26,6 +31,8 @@ export function applyFilters(tickets: Ticket[], f: Filters): Ticket[] {
     if (f.type !== "all" && t.type !== f.type) return false;
     if (f.agent !== "all" && t.agent !== f.agent) return false;
     if (f.status !== "all" && t.status !== f.status) return false;
+    if (f.team !== "all" && !matchesTeam(t, f.team)) return false;
+    if (f.keyword !== "all" && !t.keywords.includes(f.keyword)) return false;
     if (q) {
       const hay =
         `${t.requester} ${t.orderNo} ${t.detail} ${t.note} ${t.agent}`.toLowerCase();
@@ -33,6 +40,13 @@ export function applyFilters(tickets: Ticket[], f: Filters): Ticket[] {
     }
     return true;
   });
+}
+
+// 필터 값이 "팀 › 파트" 면 그 파트만, 팀 이름이면 팀 전체
+function matchesTeam(t: Ticket, value: string): boolean {
+  const [team, part] = value.split(PART_SEP);
+  if (part === undefined) return t.team === team;
+  return t.team === team && (part === NO_PART ? !t.part : t.part === part);
 }
 
 function average(values: number[]): number | null {
@@ -242,4 +256,92 @@ export function aggregateTrend(
   return [...m.entries()]
     .map(([date, count]) => ({ date, count }))
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function countBy(keys: string[]): CountBucket[] {
+  const m = new Map<string, number>();
+  for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1);
+  return [...m.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// team: 팀 단위로 묶음 / part: 팀 › 파트 단위로 나눔 (IS팀 -> Front·Delivery·Internet)
+export type TeamLevel = "team" | "part";
+
+export interface TeamStat {
+  team: string; // 팀 또는 "팀 › 파트" — 그대로 Filters.team 값으로 쓸 수 있다
+  count: number;
+  requesterCount: number;
+  types: Record<string, number>;
+  topKeywords: CountBucket[];
+}
+
+// 요청팀(또는 팀 › 파트)별 건수 · 문의유형 분포 · 요청자 수 · 주요 키워드
+export function groupByTeam(tickets: Ticket[], level: TeamLevel = "team"): TeamStat[] {
+  // 파트로 나눌 때, 파트가 있는 팀의 파트 없는 요청은 "팀 › (파트 없음)" 으로 따로 센다
+  const teamsWithParts = new Set(tickets.filter((t) => t.part).map((t) => t.team));
+  const byTeam = new Map<string, Ticket[]>();
+  for (const t of tickets) {
+    const k =
+      level === "team"
+        ? t.team
+        : t.part || !teamsWithParts.has(t.team)
+          ? t.teamPart
+          : `${t.team}${PART_SEP}${NO_PART}`;
+    const list = byTeam.get(k) ?? [];
+    list.push(t);
+    byTeam.set(k, list);
+  }
+  return [...byTeam.entries()]
+    .map(([team, list]) => {
+      const types: Record<string, number> = {};
+      for (const t of list) types[t.type] = (types[t.type] ?? 0) + 1;
+      return {
+        team,
+        count: list.length,
+        requesterCount: new Set(list.map((t) => t.requesterName)).size,
+        types,
+        topKeywords: countBy(list.flatMap((t) => t.keywords)),
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+export interface RequesterStat {
+  name: string;
+  team: string;
+  count: number;
+  topType: string | null;
+  topKeywords: CountBucket[];
+  lastDate: string | null;
+}
+
+// 요청자(이름+팀)별 건수 — 같은 이름이 다른 팀으로 바뀐 경우 따로 센다
+export function groupByRequester(tickets: Ticket[]): RequesterStat[] {
+  const byKey = new Map<string, Ticket[]>();
+  for (const t of tickets) {
+    const k = `${t.requesterName} | ${t.teamPart}`;
+    const list = byKey.get(k) ?? [];
+    list.push(t);
+    byKey.set(k, list);
+  }
+  return [...byKey.values()]
+    .map((list) => ({
+      name: list[0].requesterName,
+      team: list[0].teamPart,
+      count: list.length,
+      topType: countBy(list.map((t) => t.type))[0]?.key ?? null,
+      topKeywords: countBy(list.flatMap((t) => t.keywords)),
+      lastDate: list.reduce<string | null>(
+        (acc, t) => (t.dateKey && (!acc || t.dateKey > acc) ? t.dateKey : acc),
+        null
+      ),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// 키워드별 요청 건수 (한 요청에 여러 키워드가 걸릴 수 있어 합계가 총 요청보다 크다)
+export function groupByKeyword(tickets: Ticket[]): CountBucket[] {
+  return countBy(tickets.flatMap((t) => t.keywords));
 }

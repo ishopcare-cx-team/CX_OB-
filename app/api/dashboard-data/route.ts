@@ -5,9 +5,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { tickets, fetchedAt } = await fetchTickets();
+    const { tickets, fetchedAt, teamMapping } = await fetchTickets();
     return NextResponse.json(
-      { tickets, fetchedAt },
+      { tickets, fetchedAt, teamMapping },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e) {

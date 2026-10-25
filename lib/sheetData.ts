@@ -3,7 +3,16 @@
 // 시트 컬럼(순서 고정): 접수 시각 | 접수시각 보정 | 요청자 | 주문/사업자번호 | 문의유형 | 상세내용
 //   | 처리상태 | 특이사항 | 담당자 | 처리 시작 시각 | 처리 시각 보정 | 완료 시각 | 완료 시각 보정
 //   | [KPI] 응답 속도 | [KPI] 해결 소요 시간 | 메시지 링크 | 날짜(피봇용)
+// 요청자 "@이름(팀)" 은 lib/requester.ts 에서 이름·팀·파트로 나눈다.
 // "보정" 컬럼은 원본 접수/처리/완료 시각을 KST 기준으로 맞춘 값이라 이것만 신뢰해서 사용한다.
+
+import {
+  matchKeywords,
+  parseRequester,
+  resolveTeams,
+  type UnmappedLabel,
+} from "@/lib/requester";
+import { parseTeamMapping, TEAM_MAPPING_CSV_URL, type TeamMapping } from "@/lib/teamMapping";
 
 export const SHEET_CSV_URL =
   process.env.CX_TRACKING_SHEET_CSV_URL ||
@@ -27,6 +36,11 @@ export interface Ticket {
   receivedLabel: string | null; // "YYYY-MM-DD HH:mm" KST 표기
   dateKey: string | null; // "YYYY-MM-DD" KST 기준
   requester: string;
+  requesterName: string; // "@이윤제(Inside Sales_front)" -> "이윤제"
+  team: string; // 팀 (Inside Sales, Operation_Biz Ops)
+  part: string; // 파트 (Front) — 없으면 ""
+  teamPart: string; // 팀 › 파트 표기 (Inside Sales › Front) — 파트가 없으면 팀과 같음
+  keywords: string[]; // 상세내용에서 걸린 키워드 (lib/requester.ts KEYWORDS)
   orderNo: string;
   type: string;
   detail: string;
@@ -159,11 +173,31 @@ function normalizeStatus(raw: string): string {
   return cleaned || "기타";
 }
 
+// "요청팀 매핑" 탭 — 못 읽어도 대시보드는 코드 규칙으로 계속 보여준다 (null 반환)
+async function fetchTeamMapping(): Promise<TeamMapping | null> {
+  try {
+    const res = await fetch(TEAM_MAPPING_CSV_URL, { cache: "no-store" });
+    if (!res.ok || !(res.headers.get("content-type") || "").includes("csv")) return null;
+    return parseTeamMapping(parseCsv(await res.text()));
+  } catch {
+    return null;
+  }
+}
+
+export interface TeamMappingStatus {
+  loaded: boolean; // 매핑 탭을 읽었는지
+  unmapped: UnmappedLabel[]; // 매핑 탭에 없어 코드 규칙으로 정한 표기
+}
+
 export async function fetchTickets(): Promise<{
   tickets: Ticket[];
   fetchedAt: string;
+  teamMapping: TeamMappingStatus;
 }> {
-  const res = await fetch(SHEET_CSV_URL, { cache: "no-store" });
+  const [res, mapping] = await Promise.all([
+    fetch(SHEET_CSV_URL, { cache: "no-store" }),
+    fetchTeamMapping(),
+  ]);
   if (!res.ok) {
     throw new Error(`시트를 불러오지 못했습니다 (HTTP ${res.status})`);
   }
@@ -171,30 +205,43 @@ export async function fetchTickets(): Promise<{
   const rows = parseCsv(text);
   const [, ...dataRows] = rows; // 첫 행은 헤더
 
-  const tickets: Ticket[] = dataRows
-    .filter((r) => r.length >= 15 && r[1]?.trim())
-    .map((r) => {
-      const receivedAt = parseKstWallClock(r[1] ?? "");
-      const startedAt = parseKstWallClock(r[10] ?? "");
-      const completedAt = parseKstWallClock(r[12] ?? "");
-      return {
-        receivedAt: receivedAt ? receivedAt.toISOString() : null,
-        receivedLabel: receivedAt ? kstLabel(receivedAt) : null,
-        dateKey: receivedAt ? kstDateKey(receivedAt) : null,
-        requester: (r[2] ?? "").trim(),
-        orderNo: (r[3] ?? "").trim(),
-        type: (r[4] ?? "").trim() || "미분류",
-        detail: (r[5] ?? "").trim(),
-        status: normalizeStatus(r[6] ?? ""),
-        note: (r[7] ?? "").trim(),
-        agent: normalizeAgent(r[8] ?? ""),
-        startedAt: startedAt ? startedAt.toISOString() : null,
-        completedAt: completedAt ? completedAt.toISOString() : null,
-        responseSec: parseDurationSeconds(r[13] ?? ""),
-        resolutionSec: parseDurationSeconds(r[14] ?? ""),
-        link: (r[15] ?? "").trim(),
-      };
-    });
+  const validRows = dataRows.filter((r) => r.length >= 15 && r[1]?.trim());
+  const requesters = validRows.map((r) => parseRequester(r[2] ?? ""));
+  const { teams, unmapped } = resolveTeams(
+    requesters.map((q, i) => ({ ...q, raw: (validRows[i][2] ?? "").trim() })),
+    mapping
+  );
 
-  return { tickets, fetchedAt: new Date().toISOString() };
+  const tickets: Ticket[] = validRows.map((r, i) => {
+    const receivedAt = parseKstWallClock(r[1] ?? "");
+    const startedAt = parseKstWallClock(r[10] ?? "");
+    const completedAt = parseKstWallClock(r[12] ?? "");
+    const detail = (r[5] ?? "").trim();
+    return {
+      receivedAt: receivedAt ? receivedAt.toISOString() : null,
+      receivedLabel: receivedAt ? kstLabel(receivedAt) : null,
+      dateKey: receivedAt ? kstDateKey(receivedAt) : null,
+      requester: (r[2] ?? "").trim(),
+      requesterName: requesters[i].name,
+      ...teams[i],
+      keywords: matchKeywords(detail),
+      orderNo: (r[3] ?? "").trim(),
+      type: (r[4] ?? "").trim() || "미분류",
+      detail,
+      status: normalizeStatus(r[6] ?? ""),
+      note: (r[7] ?? "").trim(),
+      agent: normalizeAgent(r[8] ?? ""),
+      startedAt: startedAt ? startedAt.toISOString() : null,
+      completedAt: completedAt ? completedAt.toISOString() : null,
+      responseSec: parseDurationSeconds(r[13] ?? ""),
+      resolutionSec: parseDurationSeconds(r[14] ?? ""),
+      link: (r[15] ?? "").trim(),
+    };
+  });
+
+  return {
+    tickets,
+    fetchedAt: new Date().toISOString(),
+    teamMapping: { loaded: mapping != null, unmapped },
+  };
 }

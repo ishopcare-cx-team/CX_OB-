@@ -9,6 +9,8 @@ interface Props {
   types: string[];
   agents: string[];
   statuses: string[];
+  teams: { value: string; label: string }[]; // 팀 아래 파트를 들여쓴 목록
+  keywords: string[];
 }
 
 const PRESETS: { label: string; days: number | null }[] = [
@@ -19,7 +21,15 @@ const PRESETS: { label: string; days: number | null }[] = [
   { label: "전체", days: null },
 ];
 
-export function FiltersBar({ filters, onChange, types, agents, statuses }: Props) {
+export function FiltersBar({
+  filters,
+  onChange,
+  types,
+  agents,
+  statuses,
+  teams,
+  keywords,
+}: Props) {
   function applyPreset(days: number | null) {
     if (days == null) {
       onChange({ ...filters, from: null, to: null });
@@ -107,6 +117,30 @@ export function FiltersBar({ filters, onChange, types, agents, statuses }: Props
         {agents.map((a) => (
           <option key={a} value={a}>
             {a}
+          </option>
+        ))}
+      </select>
+      <select
+        className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700"
+        value={filters.team}
+        onChange={(e) => onChange({ ...filters, team: e.target.value })}
+      >
+        <option value="all">전체 요청팀</option>
+        {teams.map((t) => (
+          <option key={t.value} value={t.value}>
+            {t.label}
+          </option>
+        ))}
+      </select>
+      <select
+        className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700"
+        value={filters.keyword}
+        onChange={(e) => onChange({ ...filters, keyword: e.target.value })}
+      >
+        <option value="all">전체 키워드</option>
+        {keywords.map((k) => (
+          <option key={k} value={k}>
+            {k}
           </option>
         ))}
       </select>
